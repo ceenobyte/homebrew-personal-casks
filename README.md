@@ -8,7 +8,11 @@ Casks in this tap have their upstream `disable!` line kept as a comment for refe
 
 | Cask | Token | Notes |
 | --- | --- | --- |
-| _(none yet)_ | | |
+| [QOwnNotes](Casks/qownnotes.rb) | `qownnotes` | Disabled upstream: `fails_gatekeeper_check` |
+| [FreeTube](Casks/freetube.rb) | `freetube` | Disabled upstream: `fails_gatekeeper_check` |
+| [OpenEmu](Casks/openemu.rb) | `openemu` | Disabled upstream: `fails_gatekeeper_check` |
+| [WineHQ-stable](Casks/wine-stable.rb) | `wine-stable` | Disabled upstream: `fails_gatekeeper_check` |
+| [GStreamer runtime package](Casks/gstreamer-runtime.rb) | `gstreamer-runtime` | Disabled upstream: `fails_gatekeeper_check` |
 
 See [Adding a new cask](#adding-a-new-cask) below for how new entries end up in this table.
 
