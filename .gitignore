@@ -1,0 +1,6 @@
+# macOS
+.DS_Store
+
+# Homebrew
+*.bottle.json
+*.bottle.tar.gz
