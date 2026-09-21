@@ -20,6 +20,12 @@ cask "openemu" do
 
   app "OpenEmu.app"
 
+  postflight do
+    system_command "/usr/bin/xattr",
+                    args: ["-dr", "com.apple.quarantine", "#{appdir}/OpenEmu.app"],
+                    sudo: false
+  end
+
   zap trash: [
     "~/Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments/org.openemu.openemu.sfl*",
     "~/Library/Application Support/OpenEmu",

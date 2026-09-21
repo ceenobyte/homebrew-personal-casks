@@ -35,6 +35,12 @@ cask "freetube" do
 
   app "FreeTube.app"
 
+  postflight do
+    system_command "/usr/bin/xattr",
+                    args: ["-dr", "com.apple.quarantine", "#{appdir}/FreeTube.app"],
+                    sudo: false
+  end
+
   uninstall quit: "io.freetubeapp.freetube"
 
   zap trash: [

@@ -16,5 +16,11 @@ cask "angry-ip-scanner" do
 
   app "Angry IP Scanner.app"
 
+  postflight do
+    system_command "/usr/bin/xattr",
+                    args: ["-dr", "com.apple.quarantine", "#{appdir}/Angry IP Scanner.app"],
+                    sudo: false
+  end
+
   # No zap stanza required
 end
