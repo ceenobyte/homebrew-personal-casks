@@ -27,6 +27,23 @@ warn() { printf 'Warnung: %s\n' "$*" >&2; }
 err()  { printf 'Fehler: %s\n' "$*" >&2; }
 
 command -v brew >/dev/null 2>&1 || { err "brew wurde nicht gefunden. Siehe https://brew.sh"; exit 1; }
+
+tap_repo="$(brew --repository)/Library/Taps/ceenobyte/homebrew-personal-casks"
+if [[ ! -d "${tap_repo}/Casks" ]]; then
+  err "Der Homebrew-Tap ceenobyte/personal-casks ist nicht installiert."
+  err "Installiere ihn mit: brew tap ceenobyte/personal-casks"
+  exit 1
+fi
+
+repo_root_real="$(cd "${repo_root}" && pwd -P)"
+tap_repo_real="$(cd "${tap_repo}" && pwd -P)"
+if [[ "${repo_root_real}" != "${tap_repo_real}" ]]; then
+  err "Homebrew akzeptiert Cask-Dateien fuer livecheck und bump-cask-pr nur innerhalb eines installierten Taps."
+  err "Fuehre das Skript stattdessen im Tap-Checkout aus: ${tap_repo_real}"
+  err "Beispiel: cd \"${tap_repo_real}\" && ./scripts/update-casks.command --dry-run"
+  exit 1
+fi
+
 command -v jq   >/dev/null 2>&1 || { err "jq wurde nicht gefunden. Installiere es mit: brew install jq"; exit 1; }
 
 cask_files=()

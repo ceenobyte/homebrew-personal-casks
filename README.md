@@ -15,6 +15,7 @@ Casks in this tap have their upstream `disable!` line kept as a comment for refe
 | [OpenEmu](Casks/openemu.rb) | `openemu` | Disabled upstream: `fails_gatekeeper_check` |
 | [WineHQ-stable](Casks/wine-stable.rb) | `wine-stable` | Disabled upstream: `fails_gatekeeper_check` |
 | [GStreamer runtime package](Casks/gstreamer-runtime.rb) | `gstreamer-runtime` | Disabled upstream: `fails_gatekeeper_check` |
+| [Zenmap](Casks/zenmap.rb) | `zenmap` | Disabled upstream: `fails_gatekeeper_check` |
 
 See [Adding a new cask](#adding-a-new-cask) below for how new entries end up in this table.
 
@@ -72,21 +73,28 @@ Newly added cask files are picked up automatically on every run because the scri
 
 ### Usage
 
+Homebrew developer commands only accept Cask files from an installed tap. Run the script from the Homebrew-managed checkout, not from a separate clone of this repository:
+
+Review the tap's cask definitions before trusting it. This grants Homebrew permission to load Ruby code from the tap.
+
 ```sh
+brew trust --tap ceenobyte/personal-casks
+cd "$(brew --repository)/Library/Taps/ceenobyte/homebrew-personal-casks"
 ./scripts/update-casks.command
 ```
 
 Add `--dry-run` (or `-n`) to only report which casks have a newer version available, without modifying any files:
 
 ```sh
+cd "$(brew --repository)/Library/Taps/ceenobyte/homebrew-personal-casks"
 ./scripts/update-casks.command --dry-run
 ```
 
-The script never commits or pushes on its own. After a successful run, review the changes and commit them yourself:
+The script checks that it is running from this checkout and exits with an explanatory message otherwise. It never commits or pushes on its own. After a successful run, review the changes and commit them from the tap checkout:
 
 ```sh
 git diff
-git add Casks *.rb
+git add Casks
 git commit -m "Bump <cask> to <version>"
 git push
 ```
@@ -96,6 +104,7 @@ Only after pushing will `brew update && brew upgrade` on other machines pick up 
 ### Troubleshooting
 
 - If `brew livecheck` fails for a cask, the script prints the raw error and continues with the next one; it does not abort the whole run.
+- If Homebrew refuses to load casks from this tap as untrusted, review the tap and run `brew trust --tap ceenobyte/personal-casks` once.
 - If `brew bump-cask-pr` fails (e.g. the download URL changed in an unexpected way), the affected cask is reported as failed at the end and the script exits with a non-zero status, while still applying any other successful bumps.
 - Re-adding an active `disable!`/`deprecate!` line to a cask in this tap will make Homebrew skip it during `livecheck` and refuse `bump-cask-pr`; keep that line commented out if you want this script to keep tracking new versions.
 
