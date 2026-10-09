@@ -66,10 +66,15 @@ This script automates step 1 above: it scans the repository for cask files and b
 
 For every `*.rb` file in this repository that defines a cask (`cask "<token>" do`), the script:
 
-1. Runs `brew livecheck <file> --cask --json --newer-only`, which evaluates the `livecheck` block already defined in that cask (e.g. `strategy :github_latest`) to check upstream for a newer version. This is Homebrew's own, officially maintained mechanism for detecting new releases — no custom scraping code required.
+1. Runs `brew livecheck <file> --cask --json --quiet`, which evaluates the `livecheck` block already defined in that cask (e.g. `strategy :github_latest`) to check upstream for a newer version and distinguish skipped casks from current ones. This is Homebrew's own, officially maintained mechanism for detecting new releases — no custom scraping code required.
 2. If a newer version is found, runs `brew bump-cask-pr <file> --version=<new-version> --write-only --no-browse`. `bump-cask-pr` is Homebrew's own version-bump tool: it downloads the new release, computes the correct SHA-256 checksum(s) (including per-architecture/per-OS variants for casks that use `arch arm:`/`intel:` blocks), and rewrites `version`/`sha256` in the cask file. `--write-only` makes sure it only edits the file — it never commits, forks, or opens a pull request.
 
 Newly added cask files are picked up automatically on every run because the script discovers casks by scanning for `cask "..." do` blocks instead of relying on a hardcoded list. There is nothing to register when a new cask is added to this tap.
+
+FreeTube supports macOS Sequoia and newer. Upstream currently publishes only
+pre-releases, so its updater skips only Homebrew's GitHub pre-release and minimum
+OS audit checks; all other online audit checks still run. Review each release
+before updating the cask.
 
 ### Usage
 

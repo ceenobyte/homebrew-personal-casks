@@ -63,6 +63,7 @@ ${dry_run} && log "Dry-Run-Modus: es werden keine Dateien veraendert."
 
 updated=()
 uptodate=()
+skipped=()
 failed=()
 
 for file in "${cask_files[@]}"; do
@@ -77,7 +78,7 @@ for file in "${cask_files[@]}"; do
 
   log "Pruefe ${token} (${rel_path}) ..."
 
-  if ! livecheck_json="$(brew livecheck "${file}" --cask --json --quiet --newer-only 2>/tmp/livecheck-error.$$)"; then
+  if ! livecheck_json="$(brew livecheck "${file}" --cask --json --quiet 2>/tmp/livecheck-error.$$)"; then
     warn "brew livecheck ist fuer ${token} fehlgeschlagen:"
     sed 's/^/    /' /tmp/livecheck-error.$$ >&2 || true
     rm -f /tmp/livecheck-error.$$
@@ -86,7 +87,21 @@ for file in "${cask_files[@]}"; do
   fi
   rm -f /tmp/livecheck-error.$$
 
+  livecheck_status="$(jq -r '.[0].status // empty' <<<"${livecheck_json}")"
+  if [[ "${livecheck_status}" == "skipped" ]]; then
+    skip_message="$(jq -r '.[0].messages // [] | join("; ")' <<<"${livecheck_json}")"
+    log "${token} wird uebersprungen: ${skip_message}"
+    skipped+=("${token}")
+    continue
+  fi
+
   if [[ "$(jq 'length' <<<"${livecheck_json}")" -eq 0 ]]; then
+    log "${token} ist bereits aktuell."
+    uptodate+=("${token}")
+    continue
+  fi
+
+  if [[ "$(jq -r '.[0].version.outdated // false' <<<"${livecheck_json}")" != "true" ]]; then
     log "${token} ist bereits aktuell."
     uptodate+=("${token}")
     continue
@@ -108,12 +123,25 @@ for file in "${cask_files[@]}"; do
     continue
   fi
 
-  if brew bump-cask-pr "${file}" --version="${latest_version}" --write-only --no-browse; then
-    updated+=("${token} -> ${latest_version}")
-  else
+  if [[ "${token}" == "freetube" ]]; then
+    if ! brew bump-cask-pr "${file}" --version="${latest_version}" --write-only --no-browse --no-audit; then
+      warn "Automatischer Versions-Bump fuer ${token} ist fehlgeschlagen (z. B. URL/SHA-256 pruefen)."
+      failed+=("${token}")
+      continue
+    fi
+
+    if ! brew audit --cask --online --except=github_prerelease_version,min_os "ceenobyte/personal-casks/${token}"; then
+      warn "Gezieltes Online-Audit fuer ${token} ist fehlgeschlagen."
+      failed+=("${token}")
+      continue
+    fi
+  elif ! brew bump-cask-pr "${file}" --version="${latest_version}" --write-only --no-browse; then
     warn "Automatischer Versions-Bump fuer ${token} ist fehlgeschlagen (z. B. URL/SHA-256 pruefen)."
     failed+=("${token}")
+    continue
   fi
+
+  updated+=("${token} -> ${latest_version}")
 done
 
 echo
@@ -124,6 +152,9 @@ if [[ ${#updated[@]} -gt 0 ]]; then
 fi
 if [[ ${#uptodate[@]} -gt 0 ]]; then
   printf '  Bereits aktuell: %s\n' "$(IFS=, ; echo "${uptodate[*]}")"
+fi
+if [[ ${#skipped[@]} -gt 0 ]]; then
+  printf '  Uebersprungen: %s\n' "$(IFS=, ; echo "${skipped[*]}")"
 fi
 if [[ ${#failed[@]} -gt 0 ]]; then
   printf '  Fehlgeschlagen:\n'

@@ -5,7 +5,12 @@ cask "angry-ip-scanner" do
   sha256 arm:   "e8997d2ff12f7322ecb3dd0b4c4a410187aa8a26ad89772c833af6de781dfd29",
          intel: "554c5a14ee32c1ef1812f5382209afee75548c350ed767cf924bc5e0532f403b"
 
-  url "https://github.com/angryip/ipscan/releases/download/#{version}/ipscan-mac#{arch}-#{version}.zip"
+  download_name = if version >= "3.12.0"
+    "ipscan-#{version}-mac#{arch}"
+  else
+    "ipscan-mac#{arch}-#{version}"
+  end
+  url "https://github.com/angryip/ipscan/releases/download/#{version}/#{download_name}.zip"
   name "Angry IP Scanner"
   desc "Network scanner"
   homepage "https://angryip.org/"
