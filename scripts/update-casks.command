@@ -76,9 +76,11 @@ for file in "${cask_files[@]}"; do
     continue
   fi
 
+  cask_ref="ceenobyte/personal-casks/${token}"
+
   log "Pruefe ${token} (${rel_path}) ..."
 
-  if ! livecheck_json="$(brew livecheck "${file}" --cask --json --quiet 2>/tmp/livecheck-error.$$)"; then
+  if ! livecheck_json="$(brew livecheck "${cask_ref}" --cask --json --quiet 2>/tmp/livecheck-error.$$)"; then
     warn "brew livecheck ist fuer ${token} fehlgeschlagen:"
     sed 's/^/    /' /tmp/livecheck-error.$$ >&2 || true
     rm -f /tmp/livecheck-error.$$
@@ -124,7 +126,7 @@ for file in "${cask_files[@]}"; do
   fi
 
   if [[ "${token}" == "freetube" ]]; then
-    if ! brew bump-cask-pr "${file}" --version="${latest_version}" --write-only --no-browse --no-audit; then
+    if ! brew bump-cask-pr "${cask_ref}" --version="${latest_version}" --write-only --no-browse --no-audit; then
       warn "Automatischer Versions-Bump fuer ${token} ist fehlgeschlagen (z. B. URL/SHA-256 pruefen)."
       failed+=("${token}")
       continue
@@ -135,7 +137,7 @@ for file in "${cask_files[@]}"; do
       failed+=("${token}")
       continue
     fi
-  elif ! brew bump-cask-pr "${file}" --version="${latest_version}" --write-only --no-browse; then
+  elif ! brew bump-cask-pr "${cask_ref}" --version="${latest_version}" --write-only --no-browse; then
     warn "Automatischer Versions-Bump fuer ${token} ist fehlgeschlagen (z. B. URL/SHA-256 pruefen)."
     failed+=("${token}")
     continue
