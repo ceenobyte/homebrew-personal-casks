@@ -22,6 +22,8 @@ See [Adding a new cask](#adding-a-new-cask) below for how new entries end up in 
 ## Requirements
 
 - macOS with [Homebrew](https://brew.sh) installed.
+- For publishing updates: a configured Git commit identity and authenticated
+  push access to this tap's `origin` remote.
 - [`jq`](https://jqlang.org/) (only required to run `scripts/update-casks.command`):
 
   ```sh
@@ -60,7 +62,7 @@ brew upgrade
 
 ## `scripts/update-casks.command`
 
-This script automates step 1 above: it scans the repository for cask files and bumps any that have a newer upstream release, using Homebrew's own developer tooling rather than reimplementing version/checksum logic.
+This script automates step 1 above: it scans the repository for cask files, bumps any that have a newer upstream release, and commits and pushes successful updates so other clients can receive them. It uses Homebrew's own developer tooling rather than reimplementing version/checksum logic.
 
 ### What it does
 
@@ -68,6 +70,12 @@ For every `*.rb` file in this repository that defines a cask (`cask "<token>" do
 
 1. Runs `brew livecheck ceenobyte/personal-casks/<token> --cask --json --quiet`, which evaluates the `livecheck` block already defined in that cask (e.g. `strategy :github_latest`) to check upstream for a newer version and distinguish skipped casks from current ones. Homebrew expects a cask name here, not a path to its Ruby file.
 2. If a newer version is found, runs `brew bump-cask-pr ceenobyte/personal-casks/<token> --version=<new-version> --write-only --no-browse`. `bump-cask-pr` is Homebrew's own version-bump tool: it downloads the new release, computes the correct SHA-256 checksum(s) (including per-architecture/per-OS variants for casks that use `arch arm:`/`intel:` blocks), and rewrites `version`/`sha256` in the cask file. `--write-only` makes sure it only edits the file — it never commits, forks, or opens a pull request.
+
+After checking all casks, the script creates one commit containing only
+successfully updated cask files and pushes it to `origin`'s default branch
+(normally `main`, as recorded by `origin/HEAD`). If no cask files actually
+changed, it does not commit or push. Failed cask updates are not included;
+any changes they left behind remain local for review.
 
 Newly added cask files are picked up automatically on every run because the script discovers casks by scanning for `cask "..." do` blocks instead of relying on a hardcoded list. There is nothing to register when a new cask is added to this tap.
 
@@ -88,29 +96,33 @@ cd "$(brew --repository)/Library/Taps/ceenobyte/homebrew-personal-casks"
 ./scripts/update-casks.command
 ```
 
-Add `--dry-run` (or `-n`) to only report which casks have a newer version available, without modifying any files:
+Add `--dry-run` (or `-n`) to only report which casks have a newer version available, without changing cask files or running Git fetch, commit, or push:
 
 ```sh
 cd "$(brew --repository)/Library/Taps/ceenobyte/homebrew-personal-casks"
 ./scripts/update-casks.command --dry-run
 ```
 
-The script checks that it is running from this checkout and exits with an explanatory message otherwise. It never commits or pushes on its own. After a successful run, review the changes and commit them from the tap checkout:
+The script checks that it is running from this checkout and exits with an
+explanatory message otherwise. Normal runs additionally require a clean Git
+working tree and index, including no untracked files, on `origin`'s default
+branch. The script fetches that branch and requires the local and remote commits
+to match before modifying any casks. It does not stash, merge, reset, or
+force-push, and will not publish pre-existing local commits.
 
-```sh
-git diff
-git add Casks
-git commit -m "Bump <cask> to <version>"
-git push
-```
-
-Only after pushing will `brew update && brew upgrade` on other machines pick up the new version.
+Dry runs skip these Git publishing checks, so they can also inspect a checkout
+with local changes. After a successful normal run, other machines can run
+`brew update && brew upgrade` to receive the published versions; no manual
+commit or push is needed.
 
 ### Troubleshooting
 
 - If `brew livecheck` fails for a cask, the script prints the raw error and continues with the next one; it does not abort the whole run.
 - If Homebrew refuses to load casks from this tap as untrusted, review the tap and run `brew trust --tap ceenobyte/personal-casks` once.
-- If `brew bump-cask-pr` fails (e.g. the download URL changed in an unexpected way), the affected cask is reported as failed at the end and the script exits with a non-zero status, while still applying any other successful bumps.
+- If `brew bump-cask-pr` or a cask audit fails (e.g. the download URL changed in an unexpected way), the affected cask is reported as failed and the script exits with a non-zero status. Other successful bumps are still committed and pushed; failed files remain local for review.
+- If Git reports local changes, a different branch, or a local/remote commit mismatch, resolve that state separately before retrying. The script stops before modifying any casks in these cases.
+- If `origin/HEAD` is missing, verify the remote and run `git remote set-head origin --auto` in the tap checkout.
+- If fetching, committing, or pushing fails, the script reports an error and exits non-zero. Cask changes or an already-created commit remain local; inspect them before retrying. A failed push prints the explicit retry command.
 - Re-adding an active `disable!`/`deprecate!` line to a cask in this tap will make Homebrew skip it during `livecheck` and refuse `bump-cask-pr`; keep that line commented out if you want this script to keep tracking new versions.
 
 ## Adding a new cask

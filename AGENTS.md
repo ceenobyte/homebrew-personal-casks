@@ -23,8 +23,10 @@ and includes a script for checking and bumping cask versions.
 - Run `scripts/update-casks.command` only from the Homebrew-managed checkout
   of this installed tap. Preserve the script's installed-tap and checkout
   checks.
-- Keep `--dry-run` free of file modifications. The updater must not commit or
-  push; users review and commit its changes themselves.
+- Keep `--dry-run` free of cask modifications and Git fetch, commit, or push.
+  Normal runs commit and push only successfully updated casks to `origin`'s
+  default branch from a clean, synchronized checkout. Never include unrelated
+  changes or use force-push.
 - Keep upstream `disable!` or `deprecate!` metadata as comments when the tap
   intentionally keeps a cask active. Preserve the upstream date and reason.
 - Let Homebrew calculate updated checksums. Do not guess or copy a checksum

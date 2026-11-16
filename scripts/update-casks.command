@@ -13,6 +13,7 @@ for arg in "$@"; do
     -h|--help)
       printf 'Verwendung: %s [--dry-run]\n' "$(basename "$0")"
       printf '  --dry-run  Nur anzeigen, welche Casks aktualisiert wuerden.\n'
+      printf '  Ohne --dry-run werden erfolgreiche Updates committet und gepusht.\n'
       exit 0
       ;;
     *)
@@ -38,7 +39,7 @@ fi
 repo_root_real="$(cd "${repo_root}" && pwd -P)"
 tap_repo_real="$(cd "${tap_repo}" && pwd -P)"
 if [[ "${repo_root_real}" != "${tap_repo_real}" ]]; then
-  err "Homebrew akzeptiert Cask-Dateien fuer livecheck und bump-cask-pr nur innerhalb eines installierten Taps."
+  err "Das Skript muss im Homebrew-verwalteten Tap-Checkout ausgefuehrt werden."
   err "Fuehre das Skript stattdessen im Tap-Checkout aus: ${tap_repo_real}"
   err "Beispiel: cd \"${tap_repo_real}\" && ./scripts/update-casks.command --dry-run"
   exit 1
@@ -46,12 +47,55 @@ fi
 
 command -v jq   >/dev/null 2>&1 || { err "jq wurde nicht gefunden. Installiere es mit: brew install jq"; exit 1; }
 
+if ! ${dry_run}; then
+  command -v git >/dev/null 2>&1 || { err "git wurde nicht gefunden."; exit 1; }
+
+  git_root="$(git -C "${repo_root}" rev-parse --show-toplevel)"
+  if [[ "${git_root}" != "${repo_root_real}" ]]; then
+    err "Der Tap-Checkout muss ein eigenstaendiges Git-Repository sein."
+    exit 1
+  fi
+
+  git_status="$(git -C "${repo_root}" status --porcelain --untracked-files=normal -- . ':!tmp' ':!tmp/**')"
+  if [[ -n "${git_status}" ]]; then
+    err "Der Tap-Checkout enthaelt lokale Aenderungen. Bitte zuerst separat committen oder sichern."
+    exit 1
+  fi
+
+  if ! branch_ref="$(git -C "${repo_root}" symbolic-ref --quiet HEAD)"; then
+    err "Der Tap-Checkout befindet sich nicht auf einem Branch (detached HEAD)."
+    exit 1
+  fi
+  if ! remote_head="$(git -C "${repo_root}" symbolic-ref --quiet refs/remotes/origin/HEAD)"; then
+    err "Der Standardbranch von origin ist unbekannt. Pruefe: git remote set-head origin --auto"
+    exit 1
+  fi
+  publish_ref="refs/heads/${remote_head#refs/remotes/origin/}"
+  if [[ "${branch_ref}" != "${publish_ref}" ]]; then
+    err "Automatische Updates sind nur auf dem Standardbranch ${publish_ref#refs/heads/} erlaubt."
+    exit 1
+  fi
+
+  log "Pruefe den aktuellen Stand von ${remote_head#refs/remotes/} ..."
+  if ! git -C "${repo_root}" fetch origin "${publish_ref}:${remote_head}"; then
+    err "Der Remote-Stand konnte nicht abgerufen werden. Es werden keine Casks veraendert."
+    exit 1
+  fi
+  head_before="$(git -C "${repo_root}" rev-parse HEAD)"
+  remote_commit="$(git -C "${repo_root}" rev-parse "${remote_head}")"
+  if [[ "${head_before}" != "${remote_commit}" ]]; then
+    err "Lokaler Branch und ${remote_head#refs/remotes/} sind nicht auf demselben Stand."
+    err "Bitte zuerst synchronisieren bzw. eigene Commits separat veroeffentlichen."
+    exit 1
+  fi
+fi
+
 cask_files=()
 while IFS= read -r -d '' file; do
   if grep -qE '^[[:space:]]*cask[[:space:]]+"[^"]+"[[:space:]]+do' "${file}"; then
     cask_files+=("${file}")
   fi
-done < <(find "${repo_root}" -type f -name '*.rb' ! -path '*/.git/*' -print0)
+done < <(find "${repo_root}" \( -name .git -o -path "${repo_root}/tmp" \) -prune -o -type f -name '*.rb' -print0)
 
 if [[ ${#cask_files[@]} -eq 0 ]]; then
   warn "Keine Cask-Dateien (*.rb mit 'cask \"...\" do') unter ${repo_root} gefunden."
@@ -59,9 +103,10 @@ if [[ ${#cask_files[@]} -eq 0 ]]; then
 fi
 
 log "${#cask_files[@]} Cask-Datei(en) gefunden."
-${dry_run} && log "Dry-Run-Modus: es werden keine Dateien veraendert."
+${dry_run} && log "Dry-Run-Modus: keine Dateiaenderungen, kein Git-Fetch, Commit oder Push."
 
 updated=()
+updated_files=()
 uptodate=()
 skipped=()
 failed=()
@@ -144,6 +189,7 @@ for file in "${cask_files[@]}"; do
   fi
 
   updated+=("${token} -> ${latest_version}")
+  updated_files+=("${rel_path}")
 done
 
 echo
@@ -165,8 +211,34 @@ fi
 
 if [[ ${#updated[@]} -gt 0 ]] && ! ${dry_run}; then
   echo
-  log "Bitte die Aenderungen pruefen (git diff) und committen/pushen,"
-  log "damit 'brew update' und 'brew upgrade' sie auf anderen Rechnern uebernehmen."
+  if ! current_branch="$(git -C "${repo_root}" symbolic-ref --quiet HEAD)"; then
+    err "Der Tap-Checkout befindet sich jetzt im detached-HEAD-Zustand. Kein automatischer Commit oder Push."
+    exit 1
+  fi
+  current_head="$(git -C "${repo_root}" rev-parse HEAD)"
+  if [[ "${current_branch}" != "${branch_ref}" || "${current_head}" != "${head_before}" ]]; then
+    err "Branch oder HEAD wurden waehrend des Updates geaendert. Kein automatischer Commit oder Push."
+    exit 1
+  fi
+
+  changed_files="$(git -C "${repo_root}" diff --name-only HEAD -- "${updated_files[@]}")"
+  if [[ -z "${changed_files}" ]]; then
+    log "Keine Dateiaenderungen durch die Updates; kein Commit oder Push erforderlich."
+  else
+    log "Committe erfolgreich aktualisierte Casks ..."
+    if ! git -C "${repo_root}" commit --only -m "Bump cask versions" -m "$(printf '%s\n' "${updated[@]}")" -- "${updated_files[@]}"; then
+      err "Commit fehlgeschlagen. Die Cask-Aenderungen bleiben lokal zur Pruefung erhalten."
+      exit 1
+    fi
+
+    log "Pushe Updates nach ${remote_head#refs/remotes/} ..."
+    if ! git -C "${repo_root}" push origin "HEAD:${publish_ref}"; then
+      err "Push fehlgeschlagen. Der Update-Commit bleibt lokal erhalten."
+      err "Nach Pruefung erneut pushen: git -C \"${repo_root}\" push origin \"HEAD:${publish_ref}\""
+      exit 1
+    fi
+    log "Updates veroeffentlicht. Andere Clients koennen sie mit 'brew update' und 'brew upgrade' uebernehmen."
+  fi
 fi
 
 if [[ ${#failed[@]} -gt 0 ]]; then
