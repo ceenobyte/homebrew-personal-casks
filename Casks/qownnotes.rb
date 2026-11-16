@@ -19,10 +19,10 @@ cask "qownnotes" do
 
   app "QOwnNotes.app"
 
-  postflight do
-    system_command "/usr/bin/xattr",
-                    args: ["-dr", "com.apple.quarantine", "#{appdir}/QOwnNotes.app"],
-                    sudo: false
+  postflight_steps do
+    run "/usr/bin/xattr",
+        args: ["-dr", "com.apple.quarantine", "{{appdir}}/QOwnNotes.app"],
+        sudo: false
   end
 
   uninstall quit: "com.PBE.QOwnNotes"
