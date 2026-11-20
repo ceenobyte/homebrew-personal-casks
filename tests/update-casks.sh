@@ -12,9 +12,9 @@ trap 'rm -rf "${test_root}"' EXIT
 mock_bin="${test_root}/bin"
 mkdir -p "${mock_bin}"
 
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
-export GIT_AUTHOR_NAME="Updater Test" GIT_AUTHOR_EMAIL="updater@example.invalid"
-export GIT_COMMITTER_NAME="Updater Test" GIT_COMMITTER_EMAIL="updater@example.invalid"
+printf '[user]\n\tname = Updater Test\n\temail = updater@example.invalid\n' >"${test_root}/gitconfig"
+export GIT_CONFIG_GLOBAL="${test_root}/gitconfig" GIT_CONFIG_SYSTEM=/dev/null
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 
 cat >"${mock_bin}/git" <<'GIT'
 #!/usr/bin/env bash
@@ -171,6 +171,8 @@ assert_no_pull() {
 }
 
 make_fixture success
+"${real_git}" -C "${source_repo}" config user.email source@example.invalid
+"${real_git}" -C "${tap_repo}" config user.email private@example.invalid
 expect_success
 tap_head="$("${real_git}" -C "${tap_repo}" rev-parse HEAD)"
 [[ "${tap_head}" != "${initial_head}" ]] || fail "no update commit was created"
@@ -180,7 +182,9 @@ assert_equal "$("${real_git}" -C "${source_repo}" rev-parse origin/main)" "${tap
 assert_equal "$("${real_git}" -C "${tap_repo}" diff-tree --no-commit-id --name-only -r HEAD)" \
   "$(printf 'Casks/bad.rb\nCasks/good.rb')" "committed files"
 grep -Fq 'version "2.0"' "${source_repo}/Casks/good.rb" || fail "updated cask missing from source checkout"
-printf 'PASS: updates are committed, pushed, and pulled\n'
+assert_equal "$("${real_git}" -C "${tap_repo}" log -1 --format='%ae %ce')" \
+  "source@example.invalid source@example.invalid" "commit identity"
+printf 'PASS: updates are committed with the source identity, pushed, and pulled\n'
 
 make_fixture dry-run
 printf '# Local tap work\n' >>"${tap_repo}/Casks/good.rb"

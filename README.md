@@ -122,6 +122,8 @@ This repository is the single source of truth. When the script is invoked from
 a separate checkout, the installed tap is treated as disposable: after the
 checks below pass, it is reset to `origin`'s default branch, and local tap
 commits, changes, and untracked files outside its `tmp` directory are discarded.
+Update commits then use the separate checkout's `user.name` and `user.email`,
+so a different identity configured in the tap is never published.
 The separate checkout must be clean and on that default branch, with no local
 commits that prevent a fast-forward. The script fetches both `origin` branches
 and requires them to point to the same commit before modifying casks. It checks

@@ -55,6 +55,7 @@ if ! ${dry_run}; then
   # The project checkout is the source of truth; a separate tap checkout is
   # disposable and gets reset to origin before updating.
   tap_disposable=false
+  commit_identity=()
   [[ "${source_repo}" != "${repo_root}" ]] && tap_disposable=true
 
   if ! remote_head="$(git -C "${repo_root}" symbolic-ref --quiet refs/remotes/origin/HEAD)"; then
@@ -144,6 +145,14 @@ if ! ${dry_run}; then
     fi
     branch_ref="${publish_ref}"
     head_before="$(git -C "${repo_root}" rev-parse HEAD)"
+
+    # Commit with the source checkout's identity; the tap's own Git config may
+    # use an address that GitHub rejects.
+    for key in user.name user.email; do
+      if value="$(git -C "${source_repo}" config --get "${key}")"; then
+        commit_identity+=(-c "${key}=${value}")
+      fi
+    done
   fi
   published_head="${head_before}"
 fi
@@ -319,7 +328,7 @@ if [[ ${#updated[@]} -gt 0 ]] && ! ${dry_run}; then
     log "The updates made no file changes; no commit or push is needed."
   else
     log "Committing successfully updated casks ..."
-    if ! git -C "${repo_root}" commit --only -m "Bump cask versions" -m "$(printf '%s\n' "${updated[@]}")" -- "${updated_files[@]}"; then
+    if ! git -C "${repo_root}" ${commit_identity[@]+"${commit_identity[@]}"} commit --only -m "Bump cask versions" -m "$(printf '%s\n' "${updated[@]}")" -- "${updated_files[@]}"; then
       err "Commit failed. The cask changes remain local for review."
       exit 1
     fi
