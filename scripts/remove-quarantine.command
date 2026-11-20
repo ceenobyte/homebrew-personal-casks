@@ -5,10 +5,10 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 
 log()  { printf '==> %s\n' "$*"; }
-warn() { printf 'Warnung: %s\n' "$*" >&2; }
-err()  { printf 'Fehler: %s\n' "$*" >&2; }
+warn() { printf 'Warning: %s\n' "$*" >&2; }
+err()  { printf 'Error: %s\n' "$*" >&2; }
 
-command -v ruby >/dev/null 2>&1 || { err "ruby wurde nicht gefunden."; exit 1; }
+command -v ruby >/dev/null 2>&1 || { err "ruby was not found."; exit 1; }
 
 helper="$(mktemp)"
 trap 'rm -f "${helper}"' EXIT
@@ -73,11 +73,11 @@ while IFS= read -r -d '' file; do
 done < <(find "${repo_root}" -type f -name '*.rb' ! -path '*/.git/*' -print0)
 
 if [[ ${#cask_files[@]} -eq 0 ]]; then
-  warn "Keine Cask-Dateien (*.rb mit 'cask \"...\" do') unter ${repo_root} gefunden."
+  warn "No cask files (*.rb containing 'cask \"...\" do') found under ${repo_root}."
   exit 0
 fi
 
-log "${#cask_files[@]} Cask-Datei(en) gefunden."
+log "Found ${#cask_files[@]} cask file(s)."
 
 added=()
 already_present=()
@@ -89,52 +89,52 @@ for file in "${cask_files[@]}"; do
   token="$(sed -nE 's/^[[:space:]]*cask[[:space:]]+"([^"]+)".*/\1/p' "${file}" | head -n1)"
 
   if ! result="$(ruby "${helper}" "${file}")"; then
-    warn "Verarbeitung von ${rel_path} fehlgeschlagen."
+    warn "Processing ${rel_path} failed."
     failed+=("${token:-${rel_path}}")
     continue
   fi
 
   case "${result}" in
     SKIP_EXISTS)
-      log "${token}: postflight-Quarantaene-Entfernung bereits vorhanden."
+      log "${token}: postflight quarantine removal is already present."
       already_present+=("${token}")
       ;;
     SKIP_NO_APP)
-      log "${token}: kein 'app'-Artefakt gefunden, ueberspringe."
+      log "${token}: no 'app' artifact found; skipping."
       skipped+=("${token}")
       ;;
     ADDED:*)
       apps="${result#ADDED:}"
-      log "${token}: postflight fuer '${apps}' ergaenzt."
+      log "${token}: added postflight for '${apps}'."
       added+=("${token} (${apps})")
       ;;
     *)
-      warn "Unerwartete Ausgabe fuer ${token}: ${result}"
+      warn "Unexpected output for ${token}: ${result}"
       failed+=("${token}")
       ;;
   esac
 done
 
 echo
-log "Zusammenfassung:"
+log "Summary:"
 if [[ ${#added[@]} -gt 0 ]]; then
-  printf '  Ergaenzt:\n'
+  printf '  Added:\n'
   printf '    - %s\n' "${added[@]}"
 fi
 if [[ ${#already_present[@]} -gt 0 ]]; then
-  printf '  Bereits vorhanden: %s\n' "$(IFS=, ; echo "${already_present[*]}")"
+  printf '  Already present: %s\n' "$(IFS=, ; echo "${already_present[*]}")"
 fi
 if [[ ${#skipped[@]} -gt 0 ]]; then
-  printf '  Uebersprungen (kein app-Artefakt): %s\n' "$(IFS=, ; echo "${skipped[*]}")"
+  printf '  Skipped (no app artifact): %s\n' "$(IFS=, ; echo "${skipped[*]}")"
 fi
 if [[ ${#failed[@]} -gt 0 ]]; then
-  printf '  Fehlgeschlagen:\n'
+  printf '  Failed:\n'
   printf '    - %s\n' "${failed[@]}"
 fi
 
 if [[ ${#added[@]} -gt 0 ]]; then
   echo
-  log "Bitte die Aenderungen pruefen (git diff) und committen/pushen."
+  log "Please review the changes (git diff) and commit/push them."
 fi
 
 if [[ ${#failed[@]} -gt 0 ]]; then

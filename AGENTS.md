@@ -20,13 +20,15 @@ and includes a script for checking and bumping cask versions.
 
 - Treat cask files as executable Ruby code. Review tap definitions before
   trusting the tap with `brew trust --tap ceenobyte/personal-casks`.
-- Run `scripts/update-casks.command` only from the Homebrew-managed checkout
-  of this installed tap. Preserve the script's installed-tap and checkout
-  checks.
-- Keep `--dry-run` free of cask modifications and Git fetch, commit, or push.
+- Run cask checks and updates only in the Homebrew-managed checkout of this
+  installed tap. The updater can be invoked from a separate checkout; preserve
+  its installed-tap and checkout checks.
+- Keep `--dry-run` free of cask modifications and Git fetch, commit, push, or
+  pull.
   Normal runs commit and push only successfully updated casks to `origin`'s
   default branch from a clean, synchronized checkout. Never include unrelated
-  changes or use force-push.
+  changes or use force-push. After a successful run, a separate clean checkout
+  on the same default branch may be updated by fast-forward pull.
 - Keep upstream `disable!` or `deprecate!` metadata as comments when the tap
   intentionally keeps a cask active. Preserve the upstream date and reason.
 - Let Homebrew calculate updated checksums. Do not guess or copy a checksum
@@ -48,7 +50,8 @@ and includes a script for checking and bumping cask versions.
 
 ## Validation
 
-- For updater script changes, run `bash -n scripts/update-casks.command`.
+- For updater script changes, run `bash -n scripts/update-casks.command` and
+  `bash tests/update-casks.sh`.
 - For cask changes, use `brew style --cask Casks/<token>.rb` and
   `brew audit --cask Casks/<token>.rb` when Homebrew is available.
 - `brew livecheck` can access the network; `brew bump-cask-pr` can modify a
