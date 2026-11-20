@@ -26,9 +26,11 @@ and includes a script for checking and bumping cask versions.
 - Keep `--dry-run` free of cask modifications and Git fetch, commit, push, or
   pull.
   Normal runs commit and push only successfully updated casks to `origin`'s
-  default branch from a clean, synchronized checkout. Never include unrelated
-  changes or use force-push. After a successful run, a separate clean checkout
-  on the same default branch may be updated by fast-forward pull.
+  default branch. Never include unrelated changes or use force-push. This
+  repository is the source of truth: when invoked from a separate checkout, the
+  updater resets the disposable installed tap to `origin` before updating, and
+  after a successful run fast-forwards the clean separate checkout. Never reset
+  or discard changes in the separate checkout.
 - Keep upstream `disable!` or `deprecate!` metadata as comments when the tap
   intentionally keeps a cask active. Preserve the upstream date and reason.
 - Let Homebrew calculate updated checksums. Do not guess or copy a checksum

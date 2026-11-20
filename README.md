@@ -118,15 +118,21 @@ pull:
 ./scripts/update-casks.command --dry-run
 ```
 
-Normal runs require the installed tap to have a clean Git working tree and
-index, including no untracked files outside its `tmp` directory, on `origin`'s
-default branch. Its local and remote commits must match. A separate checkout
-must also be clean and on that branch, with no local commits that prevent a
-fast-forward. The script fetches both `origin` branches and requires them to
-point to the same commit before modifying casks. It checks again before pulling
-and implements the pull as a fetch followed by a fast-forward, so it can verify
-the published commit and refuse to overwrite ignored files. It does not stash,
-create merge commits, reset, or force-push.
+This repository is the single source of truth. When the script is invoked from
+a separate checkout, the installed tap is treated as disposable: after the
+checks below pass, it is reset to `origin`'s default branch, and local tap
+commits, changes, and untracked files outside its `tmp` directory are discarded.
+The separate checkout must be clean and on that default branch, with no local
+commits that prevent a fast-forward. The script fetches both `origin` branches
+and requires them to point to the same commit before modifying casks. It checks
+again before pulling and implements the pull as a fetch followed by a
+fast-forward, so it can verify the published commit and refuse to overwrite
+ignored files. It never touches uncommitted work in the separate checkout,
+creates merge commits, or force-pushes.
+
+When the script is invoked directly from the installed tap, the tap is not
+reset; it must then be clean, on `origin`'s default branch, and at the same
+commit as `origin`.
 
 Dry runs skip these Git publishing and synchronization checks, so they can also
 inspect a tap with local changes. After a successful normal run, other machines
@@ -141,7 +147,7 @@ repositories and a mock Homebrew; it does not modify the installed tap.
 - If `brew livecheck` fails, reports an error, or returns an empty or invalid result for a cask, the script reports the problem and continues with the next one; the run exits non-zero and does not pull a separate checkout.
 - If Homebrew refuses to load casks from this tap as untrusted, review the tap and run `brew trust --tap ceenobyte/personal-casks` once.
 - If `brew bump-cask-pr` or a cask audit fails (e.g. the download URL changed in an unexpected way), the affected cask is reported as failed and the script exits with a non-zero status. Other successful bumps are still committed and pushed; failed files remain local for review, and a separate checkout is not pulled.
-- If Git reports local changes, a different branch, a local/remote commit mismatch, or an incompatible history, resolve that state separately before retrying. The script stops before modifying any casks in these cases.
+- If Git reports local changes, a different branch, a local/remote commit mismatch, or an incompatible history in the separate checkout (or in the tap when invoked directly from it), resolve that state separately before retrying. The script stops before modifying any casks in these cases.
 - If `origin/HEAD` is missing, verify the remote and run `git remote set-head origin --auto` in the tap checkout.
 - If fetching, committing, pushing, or pulling fails, the script reports an error and exits non-zero. Cask changes or an already-created commit remain in the installed tap; a successfully pushed commit remains on `origin`. Inspect the state before retrying. A failed push prints the explicit retry command.
 - Re-adding an active `disable!`/`deprecate!` line to a cask in this tap will make Homebrew skip it during `livecheck` and refuse `bump-cask-pr`; keep that line commented out if you want this script to keep tracking new versions.

@@ -194,21 +194,38 @@ cmp -s "${case_dir}/tap-before" "${tap_repo}/Casks/good.rb" || fail "dry run cha
 cmp -s "${case_dir}/source-before" "${source_repo}/Casks/good.rb" || fail "dry run changed the source checkout"
 printf 'PASS: dry run leaves both dirty checkouts untouched\n'
 
-for dirty_checkout in source tap; do
-  make_fixture "dirty-${dirty_checkout}"
-  if [[ "${dirty_checkout}" == source ]]; then
-    dirty_file="${source_repo}/Casks/good.rb"
-  else
-    dirty_file="${tap_repo}/Casks/good.rb"
-  fi
-  printf '# Preserve user work\n' >>"${dirty_file}"
-  cp "${dirty_file}" "${case_dir}/before"
-  expect_failure
-  [[ ! -s "${brew_log}" ]] || fail "Homebrew ran despite a dirty checkout"
-  cmp -s "${case_dir}/before" "${dirty_file}" || fail "local changes were altered"
-  assert_equal "$("${real_git}" -C "${tap_repo}" rev-parse HEAD)" "${initial_head}" "tap HEAD"
-done
-printf 'PASS: dirty checkouts are rejected before cask updates\n'
+make_fixture dirty-source
+dirty_file="${source_repo}/Casks/good.rb"
+printf '# Preserve user work\n' >>"${dirty_file}"
+cp "${dirty_file}" "${case_dir}/before"
+expect_failure
+[[ ! -s "${brew_log}" ]] || fail "Homebrew ran despite a dirty source checkout"
+cmp -s "${case_dir}/before" "${dirty_file}" || fail "local changes were altered"
+assert_equal "$("${real_git}" -C "${tap_repo}" rev-parse HEAD)" "${initial_head}" "tap HEAD"
+printf 'PASS: a dirty source checkout is rejected before cask updates\n'
+
+make_fixture disposable-tap
+printf 'Upstream change\n' >"${source_repo}/upstream.txt"
+"${real_git}" -C "${source_repo}" add upstream.txt
+"${real_git}" -C "${source_repo}" commit -q -m "Upstream change" \
+  -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+"${real_git}" -C "${source_repo}" push -q origin HEAD:main
+upstream_head="$("${real_git}" -C "${source_repo}" rev-parse HEAD)"
+printf 'Stale tap commit\n' >"${tap_repo}/stale.txt"
+"${real_git}" -C "${tap_repo}" add stale.txt
+"${real_git}" -C "${tap_repo}" commit -q -m "Stale tap commit" \
+  -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+printf '# Stale tap edit\n' >>"${tap_repo}/Casks/bad.rb"
+printf 'Untracked\n' >"${tap_repo}/untracked.txt"
+mkdir -p "${tap_repo}/tmp" && printf 'Keep\n' >"${tap_repo}/tmp/keep.txt"
+"${real_git}" -C "${tap_repo}" checkout -q --detach
+mock_livecheck=current
+expect_success
+assert_equal "$("${real_git}" -C "${tap_repo}" symbolic-ref HEAD)" "refs/heads/main" "tap branch"
+assert_equal "$("${real_git}" -C "${tap_repo}" rev-parse HEAD)" "${upstream_head}" "reset tap HEAD"
+assert_equal "$("${real_git}" -C "${tap_repo}" status --porcelain -- . ':!tmp')" "" "reset tap status"
+[[ -f "${tap_repo}/tmp/keep.txt" ]] || fail "tap tmp directory was cleaned"
+printf 'PASS: a stale, dirty, or detached tap is reset to origin\n'
 
 make_fixture source-ahead
 printf 'Local commit\n' >"${source_repo}/local.txt"

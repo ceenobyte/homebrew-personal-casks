@@ -52,24 +52,31 @@ if ! ${dry_run}; then
     exit 1
   fi
 
-  git_status="$(git -C "${repo_root}" status --porcelain --untracked-files=normal -- . ':!tmp' ':!tmp/**')"
-  if [[ -n "${git_status}" ]]; then
-    err "The tap checkout has local changes. Please commit or stash them first."
-    exit 1
-  fi
+  # The project checkout is the source of truth; a separate tap checkout is
+  # disposable and gets reset to origin before updating.
+  tap_disposable=false
+  [[ "${source_repo}" != "${repo_root}" ]] && tap_disposable=true
 
-  if ! branch_ref="$(git -C "${repo_root}" symbolic-ref --quiet HEAD)"; then
-    err "The tap checkout is not on a branch (detached HEAD)."
-    exit 1
-  fi
   if ! remote_head="$(git -C "${repo_root}" symbolic-ref --quiet refs/remotes/origin/HEAD)"; then
     err "The default branch for origin is unknown. Check with: git remote set-head origin --auto"
     exit 1
   fi
   publish_ref="refs/heads/${remote_head#refs/remotes/origin/}"
-  if [[ "${branch_ref}" != "${publish_ref}" ]]; then
-    err "Automatic updates are only allowed on the default branch ${publish_ref#refs/heads/}."
-    exit 1
+
+  if ! ${tap_disposable}; then
+    git_status="$(git -C "${repo_root}" status --porcelain --untracked-files=normal -- . ':!tmp' ':!tmp/**')"
+    if [[ -n "${git_status}" ]]; then
+      err "The tap checkout has local changes. Please commit or stash them first."
+      exit 1
+    fi
+    if ! branch_ref="$(git -C "${repo_root}" symbolic-ref --quiet HEAD)"; then
+      err "The tap checkout is not on a branch (detached HEAD)."
+      exit 1
+    fi
+    if [[ "${branch_ref}" != "${publish_ref}" ]]; then
+      err "Automatic updates are only allowed on the default branch ${publish_ref#refs/heads/}."
+      exit 1
+    fi
   fi
 
   if [[ "${source_repo}" != "${repo_root}" ]]; then
@@ -102,14 +109,15 @@ if ! ${dry_run}; then
     err "Could not fetch the remote state. No casks have been changed."
     exit 1
   fi
-  head_before="$(git -C "${repo_root}" rev-parse HEAD)"
   remote_commit="$(git -C "${repo_root}" rev-parse "${remote_head}")"
-  if [[ "${head_before}" != "${remote_commit}" ]]; then
-    err "The local branch and ${remote_head#refs/remotes/} are not at the same commit."
-    err "Please synchronize first or publish your local commits separately."
-    exit 1
+  if ! ${tap_disposable}; then
+    head_before="$(git -C "${repo_root}" rev-parse HEAD)"
+    if [[ "${head_before}" != "${remote_commit}" ]]; then
+      err "The local branch and ${remote_head#refs/remotes/} are not at the same commit."
+      err "Please synchronize first or publish your local commits separately."
+      exit 1
+    fi
   fi
-  published_head="${head_before}"
 
   if [[ "${source_repo}" != "${repo_root}" ]]; then
     log "Checking the remote state of the source checkout ..."
@@ -118,7 +126,7 @@ if ! ${dry_run}; then
       exit 1
     fi
     source_remote_commit="$(git -C "${source_repo}" rev-parse "${remote_head}")"
-    if [[ "${source_remote_commit}" != "${head_before}" ]]; then
+    if [[ "${source_remote_commit}" != "${remote_commit}" ]]; then
       err "The tap and source checkout's origin branches point to different commits."
       exit 1
     fi
@@ -127,7 +135,17 @@ if ! ${dry_run}; then
       err "Please synchronize local commits or divergent branches separately first."
       exit 1
     fi
+
+    log "Resetting the tap checkout to ${remote_head#refs/remotes/} (local tap changes are discarded) ..."
+    if ! git -C "${repo_root}" checkout --quiet --force -B "${publish_ref#refs/heads/}" "${remote_head}" \
+      || ! git -C "${repo_root}" clean -fdq -e tmp; then
+      err "Could not reset the tap checkout. No casks have been changed."
+      exit 1
+    fi
+    branch_ref="${publish_ref}"
+    head_before="$(git -C "${repo_root}" rev-parse HEAD)"
   fi
+  published_head="${head_before}"
 fi
 
 cask_list="$(mktemp "${TMPDIR:-/tmp}/cask-files.XXXXXXXX")" || { err "Could not create the temporary cask list."; exit 1; }
